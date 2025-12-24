@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<script src="https://cdn.tailwindcss.com"></script>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="ZoneEnvelope 3D Tool" />
+    <title>ZoneEnvelope 3D</title>
+    
+    <!-- This is the Tailwind CSS styling script -->
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <!-- This is where your React app will live -->
+    <div id="root"></div>
+  </body>
+</html>
