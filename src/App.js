@@ -41,9 +41,8 @@ import {
   Sparkles,
   Loader2,
   Target,
-  Table, // Used for Sensitivity tab
-  LayoutDashboard,
-  ScanText
+  Table, 
+  LayoutDashboard
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -315,7 +314,7 @@ const IsometricCanvas = ({ lot, buildingFloors, parkingFloors, zoning, sunAngle 
 
     renderStack.forEach((floor) => {
       const flrH = floor.height;
-      // Fixed: Define floor width and depth for 3D drawing
+      // PODIUM LOGIC: If parking or retail, force full buildable width
       const maxArea = bW * bD;
       const ratio = (floor.isPodium || floor.isParking) ? 1.0 : (maxArea > 0 ? Math.sqrt(floor.area / maxArea) : 1);
       const flrW = bW * ratio;
@@ -334,15 +333,10 @@ const IsometricCanvas = ({ lot, buildingFloors, parkingFloors, zoning, sunAngle 
       const rad = (sunAngle * Math.PI) / 180;
       const shX = Math.cos(rad) * shadowLen;
       const shY = Math.sin(rad) * shadowLen;
-      
-      // Calculate Shadow Points
       const s1 = toIso(-flrW/2 + offX + shX, -flrD/2 + offY + shY, 0);
-      const s2 = toIso(flrW/2 + offX + shX, -flrD/2 + offY + shY, 0);
-      const s3 = toIso(flrW/2 + offX + shX, flrD/2 + offY + shY, 0);
-      const s4 = toIso(-flrW/2 + offX + shX, flrD/2 + offY + shY, 0);
-
+      
       ctx.globalAlpha = 0.15; 
-      drawPoly([s1, s2, s3, s4], '#000000', null, 0.1); 
+      drawPoly([s1, s1, s1, s1], '#000000', null, 0.1); 
 
       drawPoly([b2, b3, t3, t2], floor.color, '#ffffff', 0.8); 
       drawPoly([b3, b4, t4, t3], shadeColor(floor.color, -10), '#ffffff', 0.9); 
