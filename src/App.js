@@ -71,7 +71,10 @@ const THEME = {
   input: "bg-slate-800 border-slate-700 text-slate-200 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500",
   success: "text-emerald-400",
   danger: "text-rose-400",
-  accentBg: "bg-cyan-600"
+  accentBg: "bg-cyan-600",
+  accentText: "text-cyan-400",
+  textMuted: "text-slate-400",
+  border: "border-slate-800"
 };
 
 // --- HELPER FUNCTIONS ---
@@ -314,7 +317,6 @@ const IsometricCanvas = ({ lot, buildingFloors, parkingFloors, zoning, sunAngle 
 
     renderStack.forEach((floor) => {
       const flrH = floor.height;
-      // PODIUM LOGIC: If parking or retail, force full buildable width
       const maxArea = bW * bD;
       const ratio = (floor.isPodium || floor.isParking) ? 1.0 : (maxArea > 0 ? Math.sqrt(floor.area / maxArea) : 1);
       const flrW = bW * ratio;
@@ -483,7 +485,6 @@ export default function App() {
   const [aiReport, setAiReport] = useState("");
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-  // NEW UNIT MIX (3/4 Beds)
   const [mix, setMix] = useState({ studio: 15, oneBed: 35, twoBed: 35, threeBed: 10, fourBed: 5 }); 
   const [circulation, setCirculation] = useState(0.15); 
   const totalMix = mix.studio + mix.oneBed + mix.twoBed + mix.threeBed + mix.fourBed;
@@ -498,7 +499,6 @@ export default function App() {
   const [visualizerMode, setVisualizerMode] = useState('studio'); 
   const [compareMode, setCompareMode] = useState(false);
 
-  // COSTS
   const [costs, setCosts] = useState({ 
     landCost: 3500000, 
     hardCostRes: 250, 
@@ -510,7 +510,6 @@ export default function App() {
     preDevCost: 150000 
   });
 
-  // EXPENSES
   const [expenses, setExpenses] = useState({
     taxesPercent: 0.015, insurancePerUnit: 500, utilitiesPerUnit: 600, repairsPerUnit: 400, mgmtPercent: 0.04, reservesPerUnit: 250 
   });
@@ -519,7 +518,6 @@ export default function App() {
     rentStudio: 2100, rent1Bed: 2800, rent2Bed: 3800, rent3Bed: 4500, rent4Bed: 5500, rentRetail: 45, parkingIncome: 150, vacancyRes: 0.05, vacancyRetail: 0.10, opexRatio: 0.35 
   });
 
-  // CAPITAL SOURCES
   const [capitalSources, setCapitalSources] = useState([
     { id: 1, name: "Senior Loan", amount: 0, rate: 0.075, amortization: 30, isSoft: false, isEditing: true }
   ]);
@@ -535,23 +533,6 @@ export default function App() {
     const targetYield = 0.065; 
     const maxProjectCost = noi / targetYield;
     return Math.max(0, maxProjectCost - hardCosts - softCosts);
-  };
-
-  const parseZoningText = () => {
-    // Simple regex parser
-    const farMatch = pastedZoning.match(/FAR.*?(\d+(\.\d+)?)/i);
-    const heightMatch = pastedZoning.match(/Height.*?(\d+)/i);
-    if(farMatch || heightMatch) {
-       setZoning(prev => ({
-         ...prev,
-         code: "Custom/Parsed",
-         far: farMatch ? parseFloat(farMatch[1]) : prev.far,
-         maxHeight: heightMatch ? parseInt(heightMatch[1]) : prev.maxHeight
-       }));
-       alert("Parsed! Check the visualizer for updates.");
-    } else {
-       alert("Could not find FAR or Height in text. Try pasting a cleaner snippet.");
-    }
   };
 
   const analysis = useMemo(() => {
@@ -578,7 +559,6 @@ export default function App() {
 
     let currentHeight = 0; let usedGSF = 0; const floors = [];
 
-    // Retail Floor - FULL FOOTPRINT
     if (targetRetail > 0) {
       const retailArea = Math.min(maxFootprint, Math.min(maxAllowedGSF, targetRetail * 1.15));
       floors.push({ type: 'retail', height: 18, area: maxFootprint, level: 1, units: 0 }); 
@@ -595,7 +575,6 @@ export default function App() {
        if (floorArea < 2000) break; 
        
        let unitsOnFloor = Math.floor(floorArea / gsfPerUnit);
-       
        if (currentTotalUnits + unitsOnFloor > maxUnitsByDensity) { unitsOnFloor = Math.max(0, maxUnitsByDensity - currentTotalUnits); if (unitsOnFloor === 0) break; }
        
        floors.push({ type: 'residential', height: 11, area: floorArea, level: floors.length + 1, units: unitsOnFloor });
@@ -607,7 +586,6 @@ export default function App() {
     const reqRetailSpots = Math.ceil((targetRetail/1000) * zoning.parkingRetail);
     let finalParkingCount = manualParkingOverride !== null ? manualParkingOverride : (reqResSpots + reqRetailSpots);
     
-    // Parking Geometry (Podium fix)
     const parkingAreaNeeded = finalParkingCount * 350; 
     const parkingFootprint = parkingStrategy === 'podium' ? maxFootprint : lotArea * 0.90; 
     const parkingLevels = Math.ceil(parkingAreaNeeded / parkingFootprint);
@@ -688,10 +666,9 @@ export default function App() {
       financials: { pgi, vacancy, egi, opex: totalOpEx, noi, totalProjectCost: totalUses, yieldOnCost, totalDebt, equityRequired, annualDebtService: annualHardDebtService, cashFlow, cashOnCash, exitValue, profit, returnOnEquity, forecast: cashFlowForecast, irr, equityMultiple, reserves: annualReserves, residualLandValue }, 
       constraints: { hitHeight: currentHeight + 11 > activeHeight, hitFAR: usedGSF >= maxAllowedGSF * 0.98, hitDensity: currentTotalUnits >= maxUnitsByDensity } 
     };
-  }, [lot, zoning, mix, targetRetail, parkingStrategy, costs, rents, expenses, isTOD, manualParkingOverride, capitalSources, loanExitCap, varianceMode, operatingAssumptions, circulation]);
+  }, [lot, zoning, mix, targetRetail, parkingStrategy, costs, rents, expenses, isTOD, manualParkingOverride, capitalSources, loanExitCap, varianceMode, operatingAssumptions, circulation, totalMix]);
 
   const optimizeMix = () => {
-    // Basic logic
     setMix({ studio: 40, oneBed: 40, twoBed: 20, threeBed: 0, fourBed: 0 });
     alert("Optimized for typical urban density.");
   };
@@ -734,6 +711,22 @@ export default function App() {
     finally { setIsGeneratingReport(false); }
   };
 
+  const parseZoningText = () => {
+    const farMatch = pastedZoning.match(/FAR.*?(\d+(\.\d+)?)/i);
+    const heightMatch = pastedZoning.match(/Height.*?(\d+)/i);
+    if(farMatch || heightMatch) {
+       setZoning(prev => ({
+         ...prev,
+         code: "Custom/Parsed",
+         far: farMatch ? parseFloat(farMatch[1]) : prev.far,
+         maxHeight: heightMatch ? parseInt(heightMatch[1]) : prev.maxHeight
+       }));
+       alert("Parsed! Check the visualizer for updates.");
+    } else {
+       alert("Could not find FAR or Height in text. Try pasting a cleaner snippet.");
+    }
+  };
+
   return (
     <div className={`flex h-screen ${THEME.bg} ${THEME.text} font-sans overflow-hidden transition-colors duration-300`}>
       {/* SIDEBAR */}
@@ -764,7 +757,7 @@ export default function App() {
              <div className="relative w-96 max-w-lg">
                <input type="text" className={`${THEME.input} w-full pl-9 pr-12 py-2 rounded-lg text-sm font-medium transition-all`} placeholder="Search Address or APN..." value={searchAddress} onChange={(e)=>setSearchAddress(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()} />
                <Search className={`absolute left-3 top-2.5 ${THEME.textMuted}`} size={16} />
-               <div className="absolute right-1 top-1 flex gap-1"><button onClick={handleAddressSearch} className={`p-1.5 rounded hover:bg-black/5 ${THEME.textMuted} hover:${THEME.accentText}`}><ArrowRight size={14} /></button></div>
+               <div className="absolute right-1 top-1 flex gap-1"><button onClick={handleAddressSearch} className={`p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-cyan-400`}><ArrowRight size={14} /></button></div>
              </div>
           </div>
           <div className="flex items-center gap-3">
@@ -836,14 +829,14 @@ export default function App() {
                                <button onClick={() => toggleSourceEdit(source.id)} className={`hover:${THEME.accentText} ${source.isEditing ? THEME.accentText : THEME.textMuted}`}>
                                  {source.isEditing ? <Save size={14}/> : <PenLine size={14}/>}
                                </button>
-                               <button onClick={() => removeSource(source.id)} className={`${THEME.textMuted} hover:text-red-500`}><Trash2 size={14}/></button>
+                               <button onClick={() => removeSource(source.id)} className={`${THEME.textMuted} hover:text-red-400`}><Trash2 size={14}/></button>
                              </div>
                           </div>
                           {source.isEditing ? (
                             <div className="mt-2 space-y-2">
                               <div className="grid grid-cols-2 gap-2">
-                                <div><label className={`text-[10px] uppercase font-bold ${THEME.textMuted}`}>Amount</label><InputField id={`amt-${source.id}`} value={source.amount} onChange={(val) => updateSource(source.id, 'amount', val)} prefix="$" theme={THEME} /></div>
-                                <div><label className={`text-[10px] uppercase font-bold ${THEME.textMuted}`}>Rate %</label><InputField id={`rate-${source.id}`} value={source.rate * 100} onChange={(val) => updateSource(source.id, 'rate', val/100)} theme={THEME} /></div>
+                                <div><label className={`text-[10px] uppercase font-bold ${THEME.textMuted}`}>Amount</label><InputField id={`amt-${source.id}`} value={source.amount} onChange={(val) => updateSource(source.id, 'amount', val)} prefix="$" /></div>
+                                <div><label className={`text-[10px] uppercase font-bold ${THEME.textMuted}`}>Rate %</label><InputField id={`rate-${source.id}`} value={source.rate * 100} onChange={(val) => updateSource(source.id, 'rate', val/100)} /></div>
                               </div>
                             </div>
                           ) : (
@@ -862,11 +855,11 @@ export default function App() {
                  {/* ACQUISITION & CONSTRUCTION */}
                  <Card title="Acquisition & Construction" theme={THEME}>
                     <div className="space-y-4">
-                       <InputField label="Land Purchase Price" id="land" prefix="$" value={costs.landCost} onChange={(v)=>setCosts({...costs, landCost: v})} theme={THEME} />
-                       <InputField label="Soft Costs / Pre-Dev" id="soft" prefix="$" value={costs.preDevCost} onChange={(v)=>setCosts({...costs, preDevCost: v})} theme={THEME} />
-                       <div className="grid grid-cols-2 gap-2"><InputField label="Res Hard Cost/SF" id="hc-res" prefix="$" value={costs.hardCostRes} onChange={(v)=>setCosts({...costs, hardCostRes: v})} theme={THEME} /><InputField label="Retail Hard Cost/SF" id="hc-ret" prefix="$" value={costs.hardCostRetail} onChange={(v)=>setCosts({...costs, hardCostRetail: v})} theme={THEME} /></div>
-                       <div className="grid grid-cols-2 gap-2"><InputField label="Podium Parking/SF" id="hc-park" prefix="$" value={costs.hardCostParking} onChange={(v)=>setCosts({...costs, hardCostParking: v})} theme={THEME} /><InputField label="Underground Parking/SF" id="hc-subt" prefix="$" value={costs.hardCostSubt} onChange={(v)=>setCosts({...costs, hardCostSubt: v})} theme={THEME} /></div>
-                       <InputField label="Soft Costs Load %" id="soft-load" suffix="%" value={costs.softCostLoad * 100} step={1} onChange={(v)=>setCosts({...costs, softCostLoad: v/100})} theme={THEME} />
+                       <InputField label="Land Purchase Price" id="land" prefix="$" value={costs.landCost} onChange={(v)=>setCosts({...costs, landCost: v})} />
+                       <InputField label="Soft Costs / Pre-Dev" id="soft" prefix="$" value={costs.preDevCost} onChange={(v)=>setCosts({...costs, preDevCost: v})} />
+                       <div className="grid grid-cols-2 gap-2"><InputField label="Res Hard Cost/SF" id="hc-res" prefix="$" value={costs.hardCostRes} onChange={(v)=>setCosts({...costs, hardCostRes: v})} /><InputField label="Retail Hard Cost/SF" id="hc-ret" prefix="$" value={costs.hardCostRetail} onChange={(v)=>setCosts({...costs, hardCostRetail: v})} /></div>
+                       <div className="grid grid-cols-2 gap-2"><InputField label="Podium Parking/SF" id="hc-park" prefix="$" value={costs.hardCostParking} onChange={(v)=>setCosts({...costs, hardCostParking: v})} /><InputField label="Underground Parking/SF" id="hc-subt" prefix="$" value={costs.hardCostSubt} onChange={(v)=>setCosts({...costs, hardCostSubt: v})} /></div>
+                       <InputField label="Soft Costs Load %" id="soft-load" suffix="%" value={costs.softCostLoad * 100} step={1} onChange={(v)=>setCosts({...costs, softCostLoad: v/100})} />
                     </div>
                  </Card>
 
@@ -874,20 +867,20 @@ export default function App() {
                  <Card title="Revenue Assumptions (Monthly)" theme={THEME}>
                     <div className="space-y-4">
                        <div className="grid grid-cols-2 gap-2">
-                         <InputField label="Studio Rent" id="rent-std" prefix="$" value={rents.rentStudio} onChange={(v)=>setRents({...rents, rentStudio: v})} theme={THEME} />
-                         <InputField label="1-Bed Rent" id="rent-1b" prefix="$" value={rents.rent1Bed} onChange={(v)=>setRents({...rents, rent1Bed: v})} theme={THEME} />
+                         <InputField label="Studio Rent" id="rent-std" prefix="$" value={rents.rentStudio} onChange={(v)=>setRents({...rents, rentStudio: v})} />
+                         <InputField label="1-Bed Rent" id="rent-1b" prefix="$" value={rents.rent1Bed} onChange={(v)=>setRents({...rents, rent1Bed: v})} />
                        </div>
                        <div className="grid grid-cols-2 gap-2">
-                         <InputField label="2-Bed Rent" id="rent-2b" prefix="$" value={rents.rent2Bed} onChange={(v)=>setRents({...rents, rent2Bed: v})} theme={THEME} />
-                         <InputField label="3-Bed Rent" id="rent-3b" prefix="$" value={rents.rent3Bed} onChange={(v)=>setRents({...rents, rent3Bed: v})} theme={THEME} />
+                         <InputField label="2-Bed Rent" id="rent-2b" prefix="$" value={rents.rent2Bed} onChange={(v)=>setRents({...rents, rent2Bed: v})} />
+                         <InputField label="3-Bed Rent" id="rent-3b" prefix="$" value={rents.rent3Bed} onChange={(v)=>setRents({...rents, rent3Bed: v})} />
                        </div>
                        <div className="grid grid-cols-2 gap-2">
-                         <InputField label="4-Bed Rent" id="rent-4b" prefix="$" value={rents.rent4Bed} onChange={(v)=>setRents({...rents, rent4Bed: v})} theme={THEME} />
-                         <InputField label="Retail Rent/SF/Yr" id="rent-ret" prefix="$" value={rents.rentRetail} onChange={(v)=>setRents({...rents, rentRetail: v})} theme={THEME} />
+                         <InputField label="4-Bed Rent" id="rent-4b" prefix="$" value={rents.rent4Bed} onChange={(v)=>setRents({...rents, rent4Bed: v})} />
+                         <InputField label="Retail Rent/SF/Yr" id="rent-ret" prefix="$" value={rents.rentRetail} onChange={(v)=>setRents({...rents, rentRetail: v})} />
                        </div>
                        <div className="grid grid-cols-2 gap-2">
-                         <InputField label="Parking $/Spot" id="rent-park" prefix="$" value={rents.parkingIncome} onChange={(v)=>setRents({...rents, parkingIncome: v})} theme={THEME} />
-                         <InputField label="Vacancy %" id="vac-res" suffix="%" value={rents.vacancyRes*100} step={0.5} onChange={(v)=>setRents({...rents, vacancyRes: v/100})} theme={THEME} />
+                         <InputField label="Parking $/Spot" id="rent-park" prefix="$" value={rents.parkingIncome} onChange={(v)=>setRents({...rents, parkingIncome: v})} />
+                         <InputField label="Vacancy %" id="vac-res" suffix="%" value={rents.vacancyRes*100} step={0.5} onChange={(v)=>setRents({...rents, vacancyRes: v/100})} />
                        </div>
                     </div>
                  </Card>
@@ -896,27 +889,27 @@ export default function App() {
                  <Card title="Operating Expenses" theme={THEME}>
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-2">
-                         <InputField label="Taxes (% Value)" id="exp-tax" suffix="%" value={expenses.taxesPercent*100} step={0.1} onChange={(v)=>setExpenses({...expenses, taxesPercent: v/100})} theme={THEME} />
-                         <InputField label="Mgmt Fee (% EGI)" id="exp-mgmt" suffix="%" value={expenses.mgmtPercent*100} step={0.5} onChange={(v)=>setExpenses({...expenses, mgmtPercent: v/100})} theme={THEME} />
+                         <InputField label="Taxes (% Value)" id="exp-tax" suffix="%" value={expenses.taxesPercent*100} step={0.1} onChange={(v)=>setExpenses({...expenses, taxesPercent: v/100})} />
+                         <InputField label="Mgmt Fee (% EGI)" id="exp-mgmt" suffix="%" value={expenses.mgmtPercent*100} step={0.5} onChange={(v)=>setExpenses({...expenses, mgmtPercent: v/100})} />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                         <InputField label="Ins $/Unit" id="exp-ins" prefix="$" value={expenses.insurancePerUnit} onChange={(v)=>setExpenses({...expenses, insurancePerUnit: v})} theme={THEME} />
-                         <InputField label="Utils $/Unit" id="exp-util" prefix="$" value={expenses.utilitiesPerUnit} onChange={(v)=>setExpenses({...expenses, utilitiesPerUnit: v})} theme={THEME} />
+                         <InputField label="Ins $/Unit" id="exp-ins" prefix="$" value={expenses.insurancePerUnit} onChange={(v)=>setExpenses({...expenses, insurancePerUnit: v})} />
+                         <InputField label="Utils $/Unit" id="exp-util" prefix="$" value={expenses.utilitiesPerUnit} onChange={(v)=>setExpenses({...expenses, utilitiesPerUnit: v})} />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                         <InputField label="R&M $/Unit" id="exp-rm" prefix="$" value={expenses.repairsPerUnit} onChange={(v)=>setExpenses({...expenses, repairsPerUnit: v})} theme={THEME} />
-                         <InputField label="Reserves $/Unit" id="exp-res" prefix="$" value={expenses.reservesPerUnit} onChange={(v)=>setExpenses({...expenses, reservesPerUnit: v})} theme={THEME} />
+                         <InputField label="R&M $/Unit" id="exp-rm" prefix="$" value={expenses.repairsPerUnit} onChange={(v)=>setExpenses({...expenses, repairsPerUnit: v})} />
+                         <InputField label="Reserves $/Unit" id="exp-res" prefix="$" value={expenses.reservesPerUnit} onChange={(v)=>setExpenses({...expenses, reservesPerUnit: v})} />
                       </div>
                     </div>
                  </Card>
 
                  <Card title="Operating Assumptions" theme={THEME}>
                     <div className="space-y-4">
-                       <InputField label="Rent Growth %" id="rent-growth" value={operatingAssumptions.rentGrowth * 100} step={0.5} onChange={(v)=>setOperatingAssumptions({...operatingAssumptions, rentGrowth: v/100})} theme={THEME} />
-                       <InputField label="Expense Growth %" id="exp-growth" value={operatingAssumptions.expenseGrowth * 100} step={0.5} onChange={(v)=>setOperatingAssumptions({...operatingAssumptions, expenseGrowth: v/100})} theme={THEME} />
+                       <InputField label="Rent Growth %" id="rent-growth" value={operatingAssumptions.rentGrowth * 100} step={0.5} onChange={(v)=>setOperatingAssumptions({...operatingAssumptions, rentGrowth: v/100})} />
+                       <InputField label="Expense Growth %" id="exp-growth" value={operatingAssumptions.expenseGrowth * 100} step={0.5} onChange={(v)=>setOperatingAssumptions({...operatingAssumptions, expenseGrowth: v/100})} />
                        <div className={`pt-2 border-t ${THEME.border}`}>
                           <label className={`text-xs font-bold ${THEME.textMuted} uppercase mb-2 block`}>Exit Assumptions</label>
-                          <InputField label="Exit Cap Rate %" id="exit-cap" value={loanExitCap * 100} step={0.25} onChange={(v)=>setLoanExitCap(v/100)} theme={THEME} />
+                          <InputField label="Exit Cap Rate %" id="exit-cap" value={loanExitCap * 100} step={0.25} onChange={(v)=>setLoanExitCap(v/100)} />
                        </div>
                     </div>
                  </Card>
@@ -989,6 +982,7 @@ export default function App() {
                            <tr className={`font-bold ${THEME.name === 'dark' ? 'bg-slate-800/50' : 'bg-slate-50'}`}><td className={`p-2 text-left sticky left-0 ${THEME.name === 'dark' ? 'bg-slate-800/50' : 'bg-slate-50'}`}>EGI</td>{analysis.financials.forecast.slice(1).map((r, i) => <td key={i} className="p-2">${formatNumber(r.egi)}</td>)}</tr>
                            <tr><td className={`p-2 text-left sticky left-0 ${THEME.name === 'dark' ? 'bg-slate-900' : 'bg-white'}`}>OpEx</td>{analysis.financials.forecast.slice(1).map((r, i) => <td key={i} className="p-2 text-rose-500">(${formatNumber(r.opex)})</td>)}</tr>
                            <tr className={`font-bold border-t ${THEME.border}`}><td className={`p-2 text-left sticky left-0 ${THEME.name === 'dark' ? 'bg-slate-900' : 'bg-white'} ${THEME.accentText}`}>NOI</td>{analysis.financials.forecast.slice(1).map((r, i) => <td key={i} className={`p-2 ${THEME.accentText}`}>${formatNumber(r.noi)}</td>)}</tr>
+                           <tr><td className={`p-2 text-left sticky left-0 ${THEME.name === 'dark' ? 'bg-slate-900' : 'bg-white'}`}>Debt Svc</td>{analysis.financials.forecast.slice(1).map((r, i) => <td key={i} className="p-2 text-rose-500">(${formatNumber(r.debt)})</td>)}</tr>
                            <tr className={`font-bold ${THEME.name === 'dark' ? 'bg-emerald-900/10' : 'bg-emerald-50'} border-t ${THEME.border}`}><td className={`p-2 text-left sticky left-0 ${THEME.name === 'dark' ? 'bg-emerald-900/10' : 'bg-emerald-50'} ${THEME.success}`}>Net CF</td>{analysis.financials.forecast.slice(1).map((r, i) => <td key={i} className={`p-2 ${THEME.success}`}>${formatNumber(r.cashFlow)}</td>)}</tr>
                          </tbody>
                       </table>
@@ -1004,7 +998,7 @@ export default function App() {
              <div className="max-w-4xl mx-auto">
                <h2 className={`text-2xl font-bold ${THEME.text} mb-6`}>Sensitivity Analysis</h2>
                <Card title="IRR Matrix: Exit Cap vs. Rent Growth" theme={THEME}>
-                  <SensitivityMatrix baseNOI={analysis.financials.noi} baseCap={loanExitCap} baseCost={analysis.sourcesUses.totalUses} theme={THEME} />
+                  <SensitivityMatrix baseNOI={analysis.financials.noi} baseCap={loanExitCap} baseCost={analysis.sourcesUses.totalUses} />
                </Card>
              </div>
            </div>
@@ -1020,7 +1014,7 @@ export default function App() {
                   <div className="space-y-6">
                      {/* Manual Zoning Controls */}
                      <div className={`p-4 rounded-lg border ${THEME.border} ${THEME.name === 'dark' ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
-                        <label className={`text-xs font-bold ${THEME.textMuted} uppercase mb-2 flex items-center gap-2`}><ScanText size={14}/> Text Parser</label>
+                        <label className={`text-xs font-bold ${THEME.textMuted} uppercase mb-2 flex items-center gap-2`}><FileText size={14}/> Text Parser</label>
                         <textarea className={`${THEME.input} w-full p-2 rounded text-xs h-24 mb-2`} placeholder="Paste zoning code text here to extract values..." value={pastedZoning} onChange={e=>setPastedZoning(e.target.value)} />
                         <button onClick={parseZoningText} className="text-xs bg-slate-500 text-white px-3 py-1 rounded">Parse Specs</button>
                      </div>
