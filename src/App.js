@@ -30,6 +30,7 @@ import {
 } from 'recharts';
 
 // --- CONFIGURATION ---
+// Paste your Render URL here if you want it to load automatically
 const DEFAULT_PROXY_URL = "https://my-zoning-api.onrender.com"; 
 
 // --- GOOGLE MAPS HELPER (FIXED LOADING LOGIC) ---
@@ -78,6 +79,8 @@ const GoogleMap = ({ apiKey, address, zoning }) => {
     const initMap = async () => {
        try {
          const geocoder = new window.google.maps.Geocoder();
+         // This geocode call costs money. It now only runs when 'address' prop changes
+         // which is controlled by the submit button, not keystrokes.
          geocoder.geocode({ 'address': address + " Chicago, IL" }, (results, status) => {
            if (status === 'OK' && results[0]) {
              const location = results[0].geometry.location;
@@ -125,7 +128,7 @@ const GoogleMap = ({ apiKey, address, zoning }) => {
     };
 
     initMap();
-  }, [isScriptLoaded, address]);
+  }, [isScriptLoaded, address]); // Only re-run if confirmed address changes
 
   if (!apiKey) return <div className="flex items-center justify-center h-full bg-slate-100 text-slate-400 text-xs">Enter API Key to load Google Maps</div>;
   if (mapError) return <div className="flex items-center justify-center h-full bg-red-50 text-red-500 text-xs p-4 text-center">{mapError}</div>;
@@ -412,10 +415,14 @@ export default function App() {
     parkingRetail: 2.5 
   });
   const [searchAddress, setSearchAddress] = useState("");
+  // NEW: Separate state for the map's address vs the input box
+  // This prevents geocoding on every keystroke!
+  const [mapAddress, setMapAddress] = useState(""); 
+  
   const [googleApiKey, setGoogleApiKey] = useState(""); 
   const [proxyUrl, setProxyUrl] = useState(DEFAULT_PROXY_URL); 
   const [parseStatus, setParseStatus] = useState("idle");
-  const [errorDetails, setErrorDetails] = useState(""); // Track specific error messages
+  const [errorDetails, setErrorDetails] = useState(""); 
 
   // 2. Program Settings
   const [mix, setMix] = useState({ studio: 20, oneBed: 50, twoBed: 30 }); 
@@ -578,6 +585,9 @@ export default function App() {
     setErrorDetails(""); 
     const term = searchAddress.toUpperCase().trim();
     
+    // UPDATE THE MAP: This is the ONLY time the map geocodes (saving $$$)
+    setMapAddress(term);
+
     // 1. Try Live Proxy
     if (proxyUrl && proxyUrl.length > 5) {
       try {
@@ -658,6 +668,7 @@ export default function App() {
          parkingRes: 1.0,
          parkingRetail: 2.5
       });
+      // Also update the map visuals on click, but without geocoding (mock map coords)
       setSearchAddress(`Map Selection: ${zoneCode}`);
       setParseStatus("success");
     }
@@ -1062,7 +1073,7 @@ export default function App() {
                  {/* RIGHT: INTERACTIVE MAP */}
                  <div className="bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative shadow-lg">
                     {googleApiKey ? (
-                      <GoogleMap apiKey={googleApiKey} address={searchAddress} zoning={zoning} />
+                      <GoogleMap apiKey={googleApiKey} address={mapAddress} zoning={zoning} />
                     ) : (
                       <MockGISMap onParcelClick={(code) => {
                         setSearchAddress(`Selected Parcel (${code})`);
