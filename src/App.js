@@ -41,7 +41,7 @@ import {
   Sparkles,
   Loader2,
   Target,
-  Grid3X3,
+  Grid3x3, // Correct import name
   LayoutDashboard,
   ScanText
 } from 'lucide-react';
@@ -315,7 +315,6 @@ const IsometricCanvas = ({ lot, buildingFloors, parkingFloors, zoning, sunAngle 
 
     renderStack.forEach((floor) => {
       const flrH = floor.height;
-      // PODIUM LOGIC: If parking or retail, force full buildable width
       const maxArea = bW * bD;
       const ratio = (floor.isPodium || floor.isParking) ? 1.0 : (maxArea > 0 ? Math.sqrt(floor.area / maxArea) : 1);
       const flrW = bW * ratio;
@@ -564,7 +563,6 @@ export default function App() {
     const maxFootprint = buildableWidth * buildableDepth;
     const efficiency = 1 - circulation;
 
-    const totalMix = mix.studio + mix.oneBed + mix.twoBed + mix.threeBed + mix.fourBed; 
     const normMix = { 
         studio: mix.studio / totalMix, oneBed: mix.oneBed / totalMix, twoBed: mix.twoBed / totalMix,
         threeBed: mix.threeBed / totalMix, fourBed: mix.fourBed / totalMix 
@@ -742,7 +740,7 @@ export default function App() {
         <div className="flex items-center gap-2 mb-8 px-2"><div className={`${THEME.accentBg} p-2 rounded-lg text-white shadow-lg`}><Layers size={20} /></div><div><h1 className="font-bold text-lg leading-none">ZoneEnvelope</h1><span className={`text-[10px] ${THEME.accentText} font-bold uppercase tracking-wider`}>PRO EDITION</span></div></div>
         <NavButton id="visualizer" icon={Maximize} label="Massing Studio" active={activeTab} onClick={setActiveTab} theme={THEME} />
         <NavButton id="financials" icon={Calculator} label="Financial Model" active={activeTab} onClick={setActiveTab} theme={THEME} />
-        <NavButton id="sensitivity" icon={Grid3X3} label="Sensitivity" active={activeTab} onClick={setActiveTab} theme={THEME} />
+        <NavButton id="sensitivity" icon={Grid3x3} label="Sensitivity" active={activeTab} onClick={setActiveTab} theme={THEME} />
         <NavButton id="report" icon={FileText} label="Investment Report" active={activeTab} onClick={setActiveTab} theme={THEME} />
         <NavButton id="zoning" icon={MapIcon} label="GIS / Zoning" active={activeTab} onClick={setActiveTab} theme={THEME} />
         <div className="mt-auto">
@@ -817,6 +815,7 @@ export default function App() {
         {/* FINANCIALS */}
         {activeTab === 'financials' && (
            <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Similar content to before but styled with THEME classes */}
               <div className="lg:col-span-4 space-y-6">
                  
                  {/* SOURCE OF FUNDS */}
