@@ -17,7 +17,15 @@ import {
   Globe,
   Server,
   ArrowRight,
-  XCircle
+  XCircle,
+  RotateCw,
+  Box,
+  Printer,
+  Share2,
+  TrendingUp,
+  Briefcase,
+  Zap,
+  FileText // <--- Added missing import here
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -34,10 +42,12 @@ import {
 const DEFAULT_PROXY_URL = "https://my-zoning-api.onrender.com"; 
 
 // --- GOOGLE MAPS HELPER (FIXED LOADING LOGIC) ---
-const GoogleMap = ({ apiKey, address, zoning }) => {
+const GoogleMap = ({ apiKey, address, zoning, lotWidth, lotDepth }) => {
   const mapRef = useRef(null);
   const [mapError, setMapError] = useState(null);
   const [isScriptLoaded, setIsScriptLoaded] = useState(false);
+  const [mapInstance, setMapInstance] = useState(null);
+  const [showSurroundings, setShowSurroundings] = useState(false);
   
   // 1. Load the Script safely
   useEffect(() => {
@@ -49,10 +59,8 @@ const GoogleMap = ({ apiKey, address, zoning }) => {
       return;
     }
 
-    // Check if script tag already exists to prevent duplicates
     const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
     if (existingScript) {
-      // If it exists but window.google isn't ready, wait for it
       existingScript.addEventListener('load', () => setIsScriptLoaded(true));
       return;
     }
@@ -62,7 +70,6 @@ const GoogleMap = ({ apiKey, address, zoning }) => {
     script.async = true;
     script.defer = true;
     
-    // CRITICAL FIX: Wait for load event before letting the app use 'window.google'
     script.onload = () => {
       console.log("Google Maps Script Loaded");
       setIsScriptLoaded(true);
@@ -72,51 +79,70 @@ const GoogleMap = ({ apiKey, address, zoning }) => {
     document.body.appendChild(script);
   }, [apiKey]);
 
-  // 2. Initialize Map once script is confirmed loaded
+  // 2. Initialize Map
   useEffect(() => {
     if (!isScriptLoaded || !mapRef.current || !address) return;
 
     const initMap = async () => {
        try {
          const geocoder = new window.google.maps.Geocoder();
-         // This geocode call costs money. It now only runs when 'address' prop changes
-         // which is controlled by the submit button, not keystrokes.
          geocoder.geocode({ 'address': address + " Chicago, IL" }, (results, status) => {
            if (status === 'OK' && results[0]) {
              const location = results[0].geometry.location;
              
-             const map = new window.google.maps.Map(mapRef.current, {
+             // Setup Map Options
+             const mapOptions = {
                center: location,
-               zoom: 18,
-               tilt: 45,
-               mapId: 'DEMO_MAP_ID', 
+               zoom: 19, // Closer zoom for lot view
+               mapId: 'DEMO_MAP_ID', // Required for vector 3D features
                disableDefaultUI: true,
-               zoomControl: true
-             });
+               zoomControl: true,
+               tilt: showSurroundings ? 45 : 0, // Enable tilt for 3D feel
+               heading: 0
+             };
 
-             const offset = 0.0002;
+             const map = new window.google.maps.Map(mapRef.current, mapOptions);
+             setMapInstance(map);
+
+             // Calculate Footprint based on LOT SIZE (Approx conversion for Chicago Lat)
+             // 1 deg Lat ~= 364,000 ft
+             // 1 deg Lng ~= 270,000 ft (at 41.8 deg N)
+             const latOffset = (lotDepth / 2) / 364000;
+             const lngOffset = (lotWidth / 2) / 270000;
+
+             const lat = location.lat();
+             const lng = location.lng();
+
              const buildingFootprint = [
-               { lat: location.lat() + offset, lng: location.lng() - offset },
-               { lat: location.lat() + offset, lng: location.lng() + offset },
-               { lat: location.lat() - offset, lng: location.lng() + offset },
-               { lat: location.lat() - offset, lng: location.lng() - offset },
+               { lat: lat + latOffset, lng: lng - lngOffset }, // NW
+               { lat: lat + latOffset, lng: lng + lngOffset }, // NE
+               { lat: lat - latOffset, lng: lng + lngOffset }, // SE
+               { lat: lat - latOffset, lng: lng - lngOffset }, // SW
              ];
 
              new window.google.maps.Polygon({
                paths: buildingFootprint,
                strokeColor: "#3b82f6",
-               strokeOpacity: 0.8,
+               strokeOpacity: 1.0,
                strokeWeight: 2,
                fillColor: "#3b82f6",
-               fillOpacity: 0.35,
+               fillOpacity: 0.25,
                map: map
              });
              
+             // Label
              new window.google.maps.Marker({
                position: location,
                map: map,
-               title: address
+               title: address,
+               label: {
+                 text: "SITE",
+                 color: "white",
+                 fontWeight: "bold",
+                 className: "bg-blue-600 px-2 py-1 rounded"
+               }
              });
+
            } else {
              console.warn("Geocode failed: " + status);
            }
@@ -128,12 +154,48 @@ const GoogleMap = ({ apiKey, address, zoning }) => {
     };
 
     initMap();
-  }, [isScriptLoaded, address]); // Only re-run if confirmed address changes
+  }, [isScriptLoaded, address, lotWidth, lotDepth, showSurroundings]);
 
-  if (!apiKey) return <div className="flex items-center justify-center h-full bg-slate-100 text-slate-400 text-xs">Enter API Key to load Google Maps</div>;
+  // Handle Tilt/Rotate
+  const toggleSurroundings = () => {
+    setShowSurroundings(!showSurroundings);
+  };
+  
+  const rotateMap = () => {
+    if(mapInstance) {
+      const currentHeading = mapInstance.getHeading() || 0;
+      mapInstance.setHeading(currentHeading + 90);
+    }
+  };
+
+  if (!apiKey) return <div className="flex items-center justify-center h-full bg-slate-100 text-slate-400 text-xs">Enter API Key in Settings to load Google Maps</div>;
   if (mapError) return <div className="flex items-center justify-center h-full bg-red-50 text-red-500 text-xs p-4 text-center">{mapError}</div>;
 
-  return <div ref={mapRef} className="w-full h-full rounded-xl overflow-hidden bg-slate-200" />;
+  return (
+    <div className="relative w-full h-full rounded-xl overflow-hidden bg-slate-200">
+      <div ref={mapRef} className="w-full h-full" />
+      
+      {/* Map Controls Overlay */}
+      <div className="absolute top-4 right-4 flex flex-col gap-2">
+         <button 
+           onClick={toggleSurroundings}
+           className={`p-2 rounded shadow-lg text-xs font-bold flex items-center justify-center gap-2 ${showSurroundings ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'}`}
+           title="Toggle 3D View"
+         >
+           <Box size={16} /> {showSurroundings ? "3D On" : "2D"}
+         </button>
+         {showSurroundings && (
+           <button 
+             onClick={rotateMap}
+             className="p-2 bg-white rounded shadow-lg text-slate-600 hover:text-indigo-600"
+             title="Rotate Map"
+           >
+             <RotateCw size={16} />
+           </button>
+         )}
+      </div>
+    </div>
+  );
 };
 
 // --- CHICAGO ZONING DATA ---
@@ -435,8 +497,11 @@ export default function App() {
 
   // 4. Visualization Settings
   const [sunAngle, setSunAngle] = useState(135); 
+  
+  // 5. PRO FEATURE: Variance Mode
+  const [varianceMode, setVarianceMode] = useState(false);
 
-  // 5. Financial Assumptions
+  // 6. Financial Assumptions
   const [costs, setCosts] = useState({
     landCost: 3500000,
     hardCostRes: 250,
@@ -444,6 +509,13 @@ export default function App() {
     hardCostParking: 90, 
     hardCostSubt: 160,   
     softCostLoad: 0.30 
+  });
+  
+  // PRO FEATURE: Debt/Equity
+  const [loan, setLoan] = useState({
+    ltc: 0.65, // 65% Loan to Cost
+    rate: 0.075, // 7.5% Interest
+    exitCap: 0.06 // 6% Exit Cap
   });
 
   const [rents, setRents] = useState({
@@ -461,7 +533,12 @@ export default function App() {
 
   const analysis = useMemo(() => {
     const lotArea = lot.width * lot.depth;
-    const maxAllowedGSF = lotArea * zoning.far;
+    
+    // Variance Mode Logic
+    const activeFAR = varianceMode ? zoning.far * 1.2 : zoning.far;
+    const activeHeight = varianceMode ? zoning.maxHeight * 1.2 : zoning.maxHeight;
+
+    const maxAllowedGSF = lotArea * activeFAR;
     const buildableWidth = Math.max(0, lot.width - (zoning.setbacks.side * 2));
     const buildableDepth = Math.max(0, lot.depth - zoning.setbacks.front - zoning.setbacks.rear);
     const maxFootprint = buildableWidth * buildableDepth;
@@ -488,7 +565,7 @@ export default function App() {
       usedGSF += retailArea;
     }
 
-    const remainingHeight = zoning.maxHeight - currentHeight;
+    const remainingHeight = activeHeight - currentHeight;
     const maxResFloorsByHeight = Math.floor(remainingHeight / 11);
     
     let resFloorsCount = 0;
@@ -500,6 +577,8 @@ export default function App() {
        let floorArea = Math.min(maxFootprint, maxAllowedGSF - usedGSF);
        if (floorArea < 1500) break; 
        let unitsOnFloor = Math.floor((floorArea * efficiency) / avgUnitSize);
+       
+       // Variance mode often relaxes density too, but we'll keep density hard for now unless user changes it
        if (currentTotalUnits + unitsOnFloor > maxUnitsByDensity) {
          unitsOnFloor = Math.max(0, maxUnitsByDensity - currentTotalUnits);
          if (unitsOnFloor === 0) break;
@@ -558,27 +637,36 @@ export default function App() {
     
     const yieldOnCost = totalProjectCost > 0 ? noi / totalProjectCost : 0;
 
-    const parkingRevenue = grossParking;
-    const parkingOpEx = parkingRevenue * rents.opexRatio; 
-    const parkingNOI = parkingRevenue - parkingOpEx;
-    const parkingYield = buildCostParking > 0 ? parkingNOI / buildCostParking : 0;
+    // --- PRO FINANCIALS ---
+    const loanAmount = totalProjectCost * loan.ltc;
+    const equityRequired = totalProjectCost - loanAmount;
+    const annualDebtService = loanAmount * loan.rate; // Simplified interest-only
+    const cashFlow = noi - annualDebtService;
+    const cashOnCash = equityRequired > 0 ? cashFlow / equityRequired : 0;
+    
+    // Developer Profit (Exit)
+    const exitValue = noi / loan.exitCap;
+    const profit = exitValue - totalProjectCost;
+    const returnOnEquity = equityRequired > 0 ? profit / equityRequired : 0;
 
     return {
       lotArea, maxAllowedGSF, usedGSF, currentHeight,
       floors, parkingFloors, totalUnits, 
-      parkingStats: { required: requiredTotal, provided: finalParkingCount, yield: parkingYield },
+      parkingStats: { required: requiredTotal, provided: finalParkingCount },
       financials: {
         grossRentRes, grossRentRetail, grossParking, 
         gpr, vacancy, egi, opex, noi,
-        totalProjectCost, yieldOnCost
+        totalProjectCost, yieldOnCost,
+        loanAmount, equityRequired, annualDebtService, cashFlow, cashOnCash,
+        exitValue, profit, returnOnEquity
       },
       constraints: {
-        hitHeight: currentHeight + 11 > zoning.maxHeight,
+        hitHeight: currentHeight + 11 > activeHeight,
         hitFAR: usedGSF >= maxAllowedGSF * 0.98,
         hitDensity: currentTotalUnits >= maxUnitsByDensity
       }
     };
-  }, [lot, zoning, mix, targetRetail, parkingStrategy, costs, rents, isTOD, manualParkingOverride]);
+  }, [lot, zoning, mix, targetRetail, parkingStrategy, costs, rents, isTOD, manualParkingOverride, loan, varianceMode]);
 
   const handleAddressSearch = async () => {
     setParseStatus("processing");
@@ -610,7 +698,7 @@ export default function App() {
            }));
            
            setParseStatus("success");
-           setTimeout(() => { setActiveTab('visualizer'); setParseStatus("idle"); }, 800);
+           setTimeout(() => { setParseStatus("idle"); }, 800);
            return;
         } else {
           console.warn("Proxy returned failure:", data.message);
@@ -647,11 +735,11 @@ export default function App() {
           mla: zone.mla
         }));
         setParseStatus("success");
-        setTimeout(() => { setActiveTab('visualizer'); setParseStatus("idle"); }, 800);
+        setTimeout(() => { setParseStatus("idle"); }, 800);
       } else {
         setZoning(prev => ({ ...prev, code: "Simulated C1-2", far: 2.2, maxHeight: 50, setbacks: { front: 0, rear: 30, side: 0 }, mla: 1000 }));
         setParseStatus("simulated");
-        setTimeout(() => { setActiveTab('visualizer'); setParseStatus("idle"); }, 1500);
+        setTimeout(() => { setParseStatus("idle"); }, 1500);
       }
     }, 1500);
   };
@@ -668,7 +756,6 @@ export default function App() {
          parkingRes: 1.0,
          parkingRetail: 2.5
       });
-      // Also update the map visuals on click, but without geocoding (mock map coords)
       setSearchAddress(`Map Selection: ${zoneCode}`);
       setParseStatus("success");
     }
@@ -683,23 +770,24 @@ export default function App() {
           <div className="bg-indigo-600 p-2 rounded-lg"><Layers size={20} /></div>
           <div>
             <h1 className="font-bold text-lg leading-none">ZoneEnvelope</h1>
-            <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">3D Edition</span>
+            <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">PRO EDITION</span>
           </div>
         </div>
 
         <NavButton id="visualizer" icon={Maximize} label="Massing & 3D" active={activeTab} onClick={setActiveTab} />
         <NavButton id="financials" icon={Calculator} label="Financial Model" active={activeTab} onClick={setActiveTab} />
+        <NavButton id="report" icon={FileText} label="Investment Report" active={activeTab} onClick={setActiveTab} />
         <NavButton id="zoning" icon={MapIcon} label="GIS / Zoning" active={activeTab} onClick={setActiveTab} />
         
         <div className="mt-auto">
           <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-            <div className="text-xs text-slate-400 font-bold uppercase mb-1">Yield on Cost</div>
-            <div className={`text-2xl font-mono font-bold ${analysis.financials.yieldOnCost > 0.06 ? 'text-emerald-400' : 'text-amber-500'}`}>
-              {(analysis.financials.yieldOnCost * 100).toFixed(2)}%
+            <div className="text-xs text-slate-400 font-bold uppercase mb-1">Developer Profit</div>
+            <div className={`text-2xl font-mono font-bold ${analysis.financials.profit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              ${(analysis.financials.profit / 1000000).toFixed(2)}M
             </div>
             <div className="text-[10px] text-slate-500 mt-2 flex justify-between">
-              <span>Cost: ${(analysis.financials.totalProjectCost/1000000).toFixed(1)}M</span>
-              <span>NOI: ${(analysis.financials.noi/1000).toFixed(0)}k</span>
+              <span>ROE: {(analysis.financials.returnOnEquity * 100).toFixed(1)}%</span>
+              <span>YOC: {(analysis.financials.yieldOnCost * 100).toFixed(2)}%</span>
             </div>
           </div>
         </div>
@@ -711,10 +799,29 @@ export default function App() {
         {/* HEADER */}
         <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
           <div className="flex items-center gap-4">
-             <span className="font-bold text-slate-700">{activeTab === 'visualizer' ? '3D Massing Studio' : activeTab === 'financials' ? 'Operating Pro Forma' : 'Zoning & GIS'}</span>
-             <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-500 font-mono border border-slate-200">{zoning.code}</span>
+             {/* GLOBAL SEARCH BAR */}
+             <div className="relative w-96 ml-4">
+               <input 
+                 type="text"
+                 className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                 placeholder="Search Address (e.g. 1000 W Randolph)"
+                 value={searchAddress}
+                 onChange={(e)=>setSearchAddress(e.target.value)}
+                 onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
+               />
+               <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+               <button 
+                 onClick={handleAddressSearch}
+                 className="absolute right-1 top-1 p-1 bg-white rounded border border-slate-200 text-slate-400 hover:text-indigo-600 shadow-sm"
+               >
+                 <ArrowRight size={14} />
+               </button>
+             </div>
           </div>
           <div className="flex items-center gap-3">
+             <div className="text-xs text-slate-400 font-medium mr-2 border-r border-slate-200 pr-4">
+               {zoning.code} • FAR {zoning.far}{varianceMode && <span className="text-indigo-600 font-bold"> (+20%)</span>}
+             </div>
              {activeTab === 'visualizer' && (
                <div className="flex bg-slate-100 p-1 rounded-lg">
                  <button onClick={() => setViewMode('3d')} className={`px-3 py-1 text-xs font-medium rounded ${viewMode === '3d' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>3D</button>
@@ -733,10 +840,22 @@ export default function App() {
             {/* CONTROLS */}
             <div className="w-80 bg-white border-r border-slate-200 overflow-y-auto p-5 space-y-6">
               
-              {/* STATUS BADGES */}
-              <div className="flex flex-wrap gap-2">
-                 {analysis.constraints.hitHeight && <div className="px-2 py-1 bg-red-100 text-red-700 text-[10px] font-bold rounded flex items-center gap-1"><AlertTriangle size={10} /> Max Height</div>}
-                 {analysis.constraints.hitFAR && <div className="px-2 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold rounded flex items-center gap-1"><AlertTriangle size={10} /> Max FAR</div>}
+              {/* VARIANCE MODE */}
+              <div className={`p-4 rounded-xl border transition-all ${varianceMode ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex justify-between items-center mb-2">
+                  <div className="flex items-center gap-2 font-bold text-xs text-indigo-800">
+                    <Zap size={14} fill={varianceMode ? "currentColor" : "none"} /> Variance Mode
+                  </div>
+                  <button 
+                    onClick={() => setVarianceMode(!varianceMode)}
+                    className={`w-8 h-4 rounded-full relative transition-colors ${varianceMode ? 'bg-indigo-500' : 'bg-slate-300'}`}
+                  >
+                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${varianceMode ? 'left-4.5' : 'left-0.5'}`} style={{left: varianceMode ? '18px' : '2px'}} />
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Simulates a +20% FAR and Height bonus from a zoning variance.
+                </p>
               </div>
 
               {/* MASSING CONTROLS */}
@@ -898,77 +1017,160 @@ export default function App() {
           </div>
         )}
 
-        {/* FINANCIALS TAB */}
+        {/* FINANCIALS TAB (ENHANCED) */}
         {activeTab === 'financials' && (
           <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-4 space-y-6">
+               <Card title="Capital Stack">
+                 <div className="space-y-4">
+                    <InputField label="Loan to Cost (LTC) %" value={loan.ltc * 100} step={5} onChange={(v)=>setLoan({...loan, ltc: v/100})} />
+                    <InputField label="Interest Rate %" value={loan.rate * 100} step={0.25} onChange={(v)=>setLoan({...loan, rate: v/100})} />
+                    <InputField label="Exit Cap Rate %" value={loan.exitCap * 100} step={0.25} onChange={(v)=>setLoan({...loan, exitCap: v/100})} />
+                    
+                    <div className="pt-2 border-t border-slate-100">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-slate-500">Loan Amount</span>
+                        <span className="font-mono font-bold">${(analysis.financials.loanAmount/1000000).toFixed(1)}M</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Equity Req.</span>
+                        <span className="font-mono font-bold text-indigo-600">${(analysis.financials.equityRequired/1000000).toFixed(1)}M</span>
+                      </div>
+                    </div>
+                 </div>
+               </Card>
                <Card title="Revenue Assumptions">
                   <div className="space-y-4">
                      <InputField label="Studio Rent" prefix="$" value={rents.rentStudio} onChange={(v)=>setRents({...rents, rentStudio: v})} />
                      <InputField label="1 Bed Rent" prefix="$" value={rents.rent1Bed} onChange={(v)=>setRents({...rents, rent1Bed: v})} />
                      <InputField label="2 Bed Rent" prefix="$" value={rents.rent2Bed} onChange={(v)=>setRents({...rents, rent2Bed: v})} />
-                     <InputField label="Retail Rent /sf/yr" prefix="$" value={rents.rentRetail} onChange={(v)=>setRents({...rents, rentRetail: v})} />
-                     <div className="pt-2 border-t border-slate-100">
-                        <InputField label="Res Vacancy %" suffix="%" value={rents.vacancyRes*100} step={0.5} onChange={(v)=>setRents({...rents, vacancyRes: v/100})} />
-                     </div>
                      <div className="pt-2 border-t border-slate-100">
                         <InputField label="Parking Income/Spot" prefix="$" value={rents.parkingIncome} onChange={(v)=>setRents({...rents, parkingIncome: v})} />
                      </div>
                   </div>
                </Card>
-               <Card title="Cost Assumptions">
-                  <div className="space-y-4">
-                     <InputField label="Land Purchase" prefix="$" value={costs.landCost} onChange={(v)=>setCosts({...costs, landCost: v})} />
-                     <InputField label="Res Hard Cost /sf" prefix="$" value={costs.hardCostRes} onChange={(v)=>setCosts({...costs, hardCostRes: v})} />
-                     <div className="pt-2 border-t border-slate-100">
-                       <InputField label="Podium Parking /sf" prefix="$" value={costs.hardCostParking} onChange={(v)=>setCosts({...costs, hardCostParking: v})} />
-                       <InputField label="Underground Parking /sf" prefix="$" value={costs.hardCostSubt} onChange={(v)=>setCosts({...costs, hardCostSubt: v})} />
+            </div>
+            <div className="lg:col-span-8">
+               <Card title="Pro Forma & Returns" className="h-full">
+                  <div className="p-4 space-y-6">
+                     
+                     {/* Returns Summary */}
+                     <div className="grid grid-cols-3 gap-4 mb-6">
+                        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
+                           <div className="text-[10px] text-emerald-600 uppercase font-bold">Return on Equity</div>
+                           <div className="text-2xl font-bold text-emerald-700">{(analysis.financials.returnOnEquity*100).toFixed(1)}%</div>
+                           <div className="text-[10px] text-emerald-600">Target: 20%+</div>
+                        </div>
+                        <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg text-center">
+                           <div className="text-[10px] text-indigo-600 uppercase font-bold">Developer Profit</div>
+                           <div className="text-2xl font-bold text-indigo-700">${(analysis.financials.profit/1000000).toFixed(1)}M</div>
+                           <div className="text-[10px] text-indigo-600">@ {(loan.exitCap*100)}% Exit Cap</div>
+                        </div>
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-center">
+                           <div className="text-[10px] text-slate-500 uppercase font-bold">Yield on Cost</div>
+                           <div className="text-2xl font-bold text-slate-700">{(analysis.financials.yieldOnCost*100).toFixed(2)}%</div>
+                        </div>
                      </div>
+
+                     <div className="border-t border-slate-100 pt-4">
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Operating Statement</h4>
+                        <MoneyRow label="Effective Gross Income (EGI)" value={analysis.financials.egi} />
+                        <MoneyRow label="Operating Expenses" value={analysis.financials.opex} isNegative />
+                        <MoneyRow label="Net Operating Income (NOI)" value={analysis.financials.noi} isTotal />
+                        <MoneyRow label="Annual Debt Service" value={analysis.financials.annualDebtService} isNegative subtext="Interest Only" />
+                        <div className="bg-slate-50 p-2 rounded mt-2">
+                           <MoneyRow label="Cash Flow After Debt" value={analysis.financials.cashFlow} isTotal />
+                           <div className="text-right text-[10px] text-slate-400 mt-1">Cash on Cash: {(analysis.financials.cashOnCash*100).toFixed(2)}%</div>
+                        </div>
+                     </div>
+
                   </div>
                </Card>
             </div>
-            <div className="lg:col-span-8">
-               <Card title="Stabilized Pro Forma" className="h-full">
-                  <div className="p-4 space-y-6">
-                     <div>
-                        <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-2">Gross Potential Revenue</h4>
-                        <MoneyRow label={`Residential (${analysis.totalUnits} Units)`} value={analysis.financials.grossRentRes} />
-                        <MoneyRow label="Commercial / Retail" value={analysis.financials.grossRentRetail} />
-                        <MoneyRow label={`Parking (${analysis.parkingStats.provided} spaces)`} value={analysis.financials.grossParking} />
-                        <MoneyRow label="Total GPR" value={analysis.financials.gpr} isTotal />
-                        <div className="my-2"></div>
-                        <MoneyRow label="Vacancy Loss" value={analysis.financials.vacancy} isNegative />
-                        <div className="bg-indigo-50 p-3 rounded mt-2">
-                           <MoneyRow label="Effective Gross Income (EGI)" value={analysis.financials.egi} isTotal />
-                        </div>
-                     </div>
-                     <div>
-                        <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-2">Operating Expenses</h4>
-                        <MoneyRow label="Taxes, Ins, Mgmt, Maint" value={analysis.financials.opex} subtext={`modeled at ${rents.opexRatio*100}% of EGI`} />
-                        <div className="bg-amber-50 p-3 rounded mt-2">
-                           <MoneyRow label="Net Operating Income (NOI)" value={analysis.financials.noi} isTotal />
-                        </div>
-                     </div>
-                     <div className="grid grid-cols-2 gap-4 mt-6">
-                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                           <div className="text-[10px] text-slate-400 uppercase font-bold mb-2">Parking Yield Analysis</div>
-                           <div className="text-xs text-slate-600 mb-1 flex justify-between">
-                             <span>Yield on Parking Cost:</span>
-                             <span className={`font-bold ${analysis.parkingStats.yield > analysis.financials.yieldOnCost ? 'text-emerald-600' : 'text-slate-700'}`}>{(analysis.parkingStats.yield * 100).toFixed(2)}%</span>
-                           </div>
-                           <div className="text-[10px] text-slate-400 italic">
-                             {analysis.parkingStats.yield > analysis.financials.yieldOnCost 
-                               ? "Parking is currently boosting total yield." 
-                               : "Parking is currently diluting total yield."}
-                           </div>
-                        </div>
-                        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
-                           <div className="text-[10px] text-emerald-600 uppercase font-bold">Total Yield on Cost</div>
-                           <div className="text-xl font-bold text-emerald-600">{(analysis.financials.yieldOnCost*100).toFixed(2)}%</div>
-                        </div>
-                     </div>
+          </div>
+        )}
+
+        {/* NEW TAB: INVESTMENT REPORT */}
+        {activeTab === 'report' && (
+          <div className="flex-1 overflow-y-auto p-8 bg-slate-100 flex justify-center">
+            <div className="w-full max-w-3xl bg-white shadow-2xl p-12 min-h-screen">
+               {/* Report Header */}
+               <div className="flex justify-between items-end border-b-2 border-slate-900 pb-6 mb-8">
+                  <div>
+                    <h1 className="text-3xl font-bold text-slate-900 mb-1">Investment Memorandum</h1>
+                    <div className="text-sm text-slate-500 font-medium uppercase tracking-widest">{searchAddress || "1200 N Ashland Ave"}</div>
                   </div>
-               </Card>
+                  <div className="text-right">
+                    <div className="text-xs text-slate-400 font-bold uppercase">Prepared By</div>
+                    <div className="font-bold text-slate-800">ZoneEnvelope</div>
+                  </div>
+               </div>
+
+               {/* Executive Summary */}
+               <div className="grid grid-cols-4 gap-6 mb-8">
+                  <div>
+                     <div className="text-[10px] text-slate-400 uppercase font-bold">Total Project Cost</div>
+                     <div className="text-xl font-bold text-slate-900">${(analysis.financials.totalProjectCost/1000000).toFixed(1)}M</div>
+                  </div>
+                  <div>
+                     <div className="text-[10px] text-slate-400 uppercase font-bold">Projected Value</div>
+                     <div className="text-xl font-bold text-emerald-600">${(analysis.financials.exitValue/1000000).toFixed(1)}M</div>
+                  </div>
+                  <div>
+                     <div className="text-[10px] text-slate-400 uppercase font-bold">Net Profit</div>
+                     <div className="text-xl font-bold text-indigo-600">${(analysis.financials.profit/1000000).toFixed(1)}M</div>
+                  </div>
+                  <div>
+                     <div className="text-[10px] text-slate-400 uppercase font-bold">Return on Equity</div>
+                     <div className="text-xl font-bold text-slate-900">{(analysis.financials.returnOnEquity*100).toFixed(1)}%</div>
+                  </div>
+               </div>
+
+               {/* Project Description */}
+               <div className="mb-8">
+                  <h3 className="text-sm font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-4">Project Description</h3>
+                  <div className="grid grid-cols-2 gap-8 text-sm text-slate-600">
+                     <p>
+                        Proposed development of a {analysis.floors.length}-story mixed-use building containing {analysis.totalUnits} residential units and {Math.round(analysis.floors[0]?.area || 0).toLocaleString()} SF of retail space.
+                        The project assumes {parkingStrategy} parking with {analysis.parkingStats.provided} spaces.
+                     </p>
+                     <ul className="space-y-1">
+                        <li className="flex justify-between border-b border-slate-100 pb-1">
+                           <span>Zoning District</span> <span className="font-mono font-bold text-slate-800">{zoning.code}</span>
+                        </li>
+                        <li className="flex justify-between border-b border-slate-100 pb-1">
+                           <span>Lot Area</span> <span className="font-mono font-bold text-slate-800">{analysis.lotArea.toLocaleString()} SF</span>
+                        </li>
+                        <li className="flex justify-between border-b border-slate-100 pb-1">
+                           <span>FAR Utilization</span> <span className="font-mono font-bold text-slate-800">{(analysis.usedGSF/analysis.lotArea).toFixed(2)}</span>
+                        </li>
+                        <li className="flex justify-between border-b border-slate-100 pb-1">
+                           <span>Efficiency</span> <span className="font-mono font-bold text-slate-800">85%</span>
+                        </li>
+                     </ul>
+                  </div>
+               </div>
+
+               {/* Pro Forma Snapshot */}
+               <div className="mb-8">
+                  <h3 className="text-sm font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-4">Financial Overview</h3>
+                  <div className="bg-slate-50 p-6 rounded-lg">
+                     <MoneyRow label="Effective Gross Income" value={analysis.financials.egi} />
+                     <MoneyRow label="Operating Expenses" value={analysis.financials.opex} isNegative />
+                     <div className="border-t border-slate-300 my-2 pt-2">
+                       <MoneyRow label="Net Operating Income (NOI)" value={analysis.financials.noi} highlight />
+                     </div>
+                     <MoneyRow label="Annual Debt Service" value={analysis.financials.annualDebtService} isNegative />
+                     <MoneyRow label="Cash Flow" value={analysis.financials.cashFlow} />
+                  </div>
+               </div>
+
+               <div className="flex justify-center mt-12">
+                  <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-lg hover:bg-slate-700 print:hidden">
+                     <Printer size={18} /> Print PDF
+                  </button>
+               </div>
+
             </div>
           </div>
         )}
@@ -976,104 +1178,72 @@ export default function App() {
         {/* ZONING TAB (GIS SIMULATION) */}
         {activeTab === 'zoning' && (
            <div className="flex-1 p-8 flex flex-col items-center justify-center">
-              <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
+              <div className="max-w-6xl w-full grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
                  
-                 {/* LEFT: ADDRESS SEARCH */}
+                 {/* LEFT: SETTINGS (API Keys, etc) */}
                  <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 flex flex-col h-full">
                     <div className="flex items-center gap-3 mb-6">
-                       <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600"><MapPin size={24} /></div>
+                       <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600"><Settings size={24} /></div>
                        <div>
-                          <h2 className="text-xl font-bold text-slate-900">Address Zoning Lookup</h2>
-                          <p className="text-sm text-slate-500">Integration with Chicago GIS.</p>
+                          <h2 className="text-xl font-bold text-slate-900">App Configuration</h2>
+                          <p className="text-sm text-slate-500">Configure API keys for live data.</p>
                        </div>
                     </div>
                     
-                    <div className="space-y-4 mb-8">
+                    <div className="space-y-6 mb-8">
                       <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase">Property Address</label>
-                        <div className="relative mt-1">
-                          <input 
-                             type="text"
-                             className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
-                             placeholder="e.g. 1000 W Randolph St"
-                             value={searchAddress}
-                             onChange={(e)=>setSearchAddress(e.target.value)}
-                             onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
-                          />
-                          <Search className="absolute left-3 top-3 text-slate-400" size={20} />
+                        <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                          Google Maps API Key <Info size={12} />
+                        </label>
+                        <input 
+                           type="password"
+                           className="w-full px-4 py-3 mt-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none"
+                           placeholder="Paste key (starts with AIza...)"
+                           value={googleApiKey}
+                           onChange={(e)=>setGoogleApiKey(e.target.value)}
+                        />
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          Required for live map view in the right panel.
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                            Google Maps API Key <Info size={12} />
-                          </label>
-                          <input 
-                             type="password"
-                             className="w-full px-4 py-2 mt-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none"
-                             placeholder="Paste key..."
-                             value={googleApiKey}
-                             onChange={(e)=>setGoogleApiKey(e.target.value)}
-                          />
+                      <div>
+                        <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                          Render Proxy URL <Server size={12} />
+                        </label>
+                        <input 
+                           type="text"
+                           className="w-full px-4 py-3 mt-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none"
+                           placeholder="https://your-app.onrender.com"
+                           value={proxyUrl}
+                           onChange={(e)=>setProxyUrl(e.target.value)}
+                        />
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          Required for zoning data. Default: {DEFAULT_PROXY_URL}
                         </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                            Render Proxy URL <Server size={12} />
-                          </label>
-                          <input 
-                             type="text"
-                             className="w-full px-4 py-2 mt-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none"
-                             placeholder="https://your-app.onrender.com"
-                             value={proxyUrl}
-                             onChange={(e)=>setProxyUrl(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-1 italic">
-                          API Key required for live map. Proxy URL required for live zoning data.
                       </div>
                     </div>
 
-                    <button 
-                       onClick={handleAddressSearch}
-                       disabled={parseStatus === 'processing' || !searchAddress}
-                       className={`w-full py-4 text-white rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg transition-all ${parseStatus === 'processing' || !searchAddress ? 'bg-slate-400' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/30'}`}
-                    >
-                       {parseStatus === 'processing' ? 'Searching GIS...' : parseStatus === 'success' ? 'Zoning Found!' : parseStatus === 'simulated' ? 'Zoning Simulated' : parseStatus === 'error' ? 'Failed - Retry' : 'Find Zoning'} 
-                       {parseStatus === 'idle' && <ArrowRight />}
-                    </button>
-                    
                     {parseStatus === 'error' && (
-                        <div className="mt-4 p-3 bg-red-50 text-red-700 text-xs rounded border border-red-200 flex gap-2">
+                        <div className="mt-auto p-3 bg-red-50 text-red-700 text-xs rounded border border-red-200 flex gap-2">
                             <XCircle size={16} />
                             <div>
                                 <strong>Error:</strong> {errorDetails || "Could not fetch zoning data."}
                             </div>
                         </div>
                     )}
-
-                    {parseStatus === 'simulated' && (
-                      <div className="mt-4 p-3 bg-amber-50 text-amber-700 text-xs rounded border border-amber-200 flex gap-2">
-                        <AlertTriangle size={16} />
-                        <span><strong>Simulation Mode:</strong> Backend connection failed, using dummy data.</span>
-                      </div>
-                    )}
-                    
-                    <div className="mt-auto pt-6 border-t border-slate-100">
-                      <div className="flex items-center gap-2 text-emerald-600 text-xs font-bold mb-2">
-                        <Globe size={14} /> Live Data Connection
-                      </div>
-                      <p className="text-xs text-slate-400 leading-relaxed">
-                        Connect to the City of Chicago Data Portal via your Render proxy to get real-time zoning for any parcel.
-                      </p>
-                    </div>
                  </div>
 
                  {/* RIGHT: INTERACTIVE MAP */}
                  <div className="bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative shadow-lg">
                     {googleApiKey ? (
-                      <GoogleMap apiKey={googleApiKey} address={mapAddress} zoning={zoning} />
+                      <GoogleMap 
+                        apiKey={googleApiKey} 
+                        address={mapAddress} 
+                        zoning={zoning} 
+                        lotWidth={lot.width}
+                        lotDepth={lot.depth}
+                      />
                     ) : (
                       <MockGISMap onParcelClick={(code) => {
                         setSearchAddress(`Selected Parcel (${code})`);
