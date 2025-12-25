@@ -25,7 +25,8 @@ import {
   TrendingUp,
   Briefcase,
   Zap,
-  FileText // <--- Added missing import here
+  FileText,
+  Settings // <--- Added missing import here
 } from 'lucide-react';
 import { 
   BarChart, 
