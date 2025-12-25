@@ -16,7 +16,7 @@ import {
   Info,
   Globe,
   Server,
-  ArrowRight // <--- Added this missing import
+  ArrowRight
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -29,8 +29,8 @@ import {
 } from 'recharts';
 
 // --- CONFIGURATION ---
-// Paste your Render URL here if you want it to load automatically
-const DEFAULT_PROXY_URL = ""; // e.g. "https://zone-envelope-backend-v2.onrender.com"
+// I have updated this to your specific Render URL
+const DEFAULT_PROXY_URL = "https://my-zoning-api.onrender.com"; 
 
 // --- GOOGLE MAPS HELPER ---
 const GoogleMap = ({ apiKey, address, zoning }) => {
