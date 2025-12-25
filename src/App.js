@@ -16,7 +16,8 @@ import {
   Info,
   Globe,
   Server,
-  ArrowRight
+  ArrowRight,
+  XCircle
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -29,76 +30,107 @@ import {
 } from 'recharts';
 
 // --- CONFIGURATION ---
-// I have updated this to your specific Render URL
 const DEFAULT_PROXY_URL = "https://my-zoning-api.onrender.com"; 
 
-// --- GOOGLE MAPS HELPER ---
+// --- GOOGLE MAPS HELPER (FIXED LOADING LOGIC) ---
 const GoogleMap = ({ apiKey, address, zoning }) => {
   const mapRef = useRef(null);
+  const [mapError, setMapError] = useState(null);
+  const [isScriptLoaded, setIsScriptLoaded] = useState(false);
   
-  useEffect(() => {
-    if (!apiKey || !window.google || !window.google.maps) return;
-
-    const initMap = async () => {
-       const geocoder = new window.google.maps.Geocoder();
-       geocoder.geocode({ 'address': address + " Chicago, IL" }, (results, status) => {
-         if (status === 'OK' && results[0]) {
-           const location = results[0].geometry.location;
-           
-           const map = new window.google.maps.Map(mapRef.current, {
-             center: location,
-             zoom: 18,
-             tilt: 45,
-             mapId: 'DEMO_MAP_ID', // Map ID required for 3D features
-             disableDefaultUI: true,
-             zoomControl: true
-           });
-
-           // Simple zoning envelope visualization (Red Box)
-           const offset = 0.0002;
-           const buildingFootprint = [
-             { lat: location.lat() + offset, lng: location.lng() - offset },
-             { lat: location.lat() + offset, lng: location.lng() + offset },
-             { lat: location.lat() - offset, lng: location.lng() + offset },
-             { lat: location.lat() - offset, lng: location.lng() - offset },
-           ];
-
-           new window.google.maps.Polygon({
-             paths: buildingFootprint,
-             strokeColor: "#3b82f6",
-             strokeOpacity: 0.8,
-             strokeWeight: 2,
-             fillColor: "#3b82f6",
-             fillOpacity: 0.35,
-             map: map
-           });
-           
-           new window.google.maps.Marker({
-             position: location,
-             map: map,
-             title: address
-           });
-         }
-       });
-    };
-
-    initMap();
-  }, [apiKey, address]);
-
-  // Load Google Maps Script dynamically
+  // 1. Load the Script safely
   useEffect(() => {
     if (!apiKey) return;
-    if (document.querySelector('script[src*="maps.googleapis.com"]')) return;
+    
+    // If already loaded, just set state
+    if (window.google && window.google.maps) {
+      setIsScriptLoaded(true);
+      return;
+    }
+
+    // Check if script tag already exists to prevent duplicates
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existingScript) {
+      // If it exists but window.google isn't ready, wait for it
+      existingScript.addEventListener('load', () => setIsScriptLoaded(true));
+      return;
+    }
     
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
     script.async = true;
+    script.defer = true;
+    
+    // CRITICAL FIX: Wait for load event before letting the app use 'window.google'
+    script.onload = () => {
+      console.log("Google Maps Script Loaded");
+      setIsScriptLoaded(true);
+    };
+    script.onerror = () => setMapError("Failed to load Google Maps script. Check API Key restrictions.");
+    
     document.body.appendChild(script);
   }, [apiKey]);
 
-  if (!apiKey) return <div className="flex items-center justify-center h-full bg-slate-100 text-slate-400 text-xs">Enter API Key to load Google Maps</div>;
+  // 2. Initialize Map once script is confirmed loaded
+  useEffect(() => {
+    if (!isScriptLoaded || !mapRef.current || !address) return;
 
-  return <div ref={mapRef} className="w-full h-full rounded-xl overflow-hidden" />;
+    const initMap = async () => {
+       try {
+         const geocoder = new window.google.maps.Geocoder();
+         geocoder.geocode({ 'address': address + " Chicago, IL" }, (results, status) => {
+           if (status === 'OK' && results[0]) {
+             const location = results[0].geometry.location;
+             
+             const map = new window.google.maps.Map(mapRef.current, {
+               center: location,
+               zoom: 18,
+               tilt: 45,
+               mapId: 'DEMO_MAP_ID', 
+               disableDefaultUI: true,
+               zoomControl: true
+             });
+
+             const offset = 0.0002;
+             const buildingFootprint = [
+               { lat: location.lat() + offset, lng: location.lng() - offset },
+               { lat: location.lat() + offset, lng: location.lng() + offset },
+               { lat: location.lat() - offset, lng: location.lng() + offset },
+               { lat: location.lat() - offset, lng: location.lng() - offset },
+             ];
+
+             new window.google.maps.Polygon({
+               paths: buildingFootprint,
+               strokeColor: "#3b82f6",
+               strokeOpacity: 0.8,
+               strokeWeight: 2,
+               fillColor: "#3b82f6",
+               fillOpacity: 0.35,
+               map: map
+             });
+             
+             new window.google.maps.Marker({
+               position: location,
+               map: map,
+               title: address
+             });
+           } else {
+             console.warn("Geocode failed: " + status);
+           }
+         });
+       } catch (e) {
+         console.error("Map Init Error:", e);
+         setMapError(e.message);
+       }
+    };
+
+    initMap();
+  }, [isScriptLoaded, address]);
+
+  if (!apiKey) return <div className="flex items-center justify-center h-full bg-slate-100 text-slate-400 text-xs">Enter API Key to load Google Maps</div>;
+  if (mapError) return <div className="flex items-center justify-center h-full bg-red-50 text-red-500 text-xs p-4 text-center">{mapError}</div>;
+
+  return <div ref={mapRef} className="w-full h-full rounded-xl overflow-hidden bg-slate-200" />;
 };
 
 // --- CHICAGO ZONING DATA ---
@@ -383,6 +415,7 @@ export default function App() {
   const [googleApiKey, setGoogleApiKey] = useState(""); 
   const [proxyUrl, setProxyUrl] = useState(DEFAULT_PROXY_URL); 
   const [parseStatus, setParseStatus] = useState("idle");
+  const [errorDetails, setErrorDetails] = useState(""); // Track specific error messages
 
   // 2. Program Settings
   const [mix, setMix] = useState({ studio: 20, oneBed: 50, twoBed: 30 }); 
@@ -542,6 +575,7 @@ export default function App() {
 
   const handleAddressSearch = async () => {
     setParseStatus("processing");
+    setErrorDetails(""); 
     const term = searchAddress.toUpperCase().trim();
     
     // 1. Try Live Proxy
@@ -570,13 +604,20 @@ export default function App() {
            return;
         } else {
           console.warn("Proxy returned failure:", data.message);
+          setErrorDetails(data.message || "Address found, but no zoning data available.");
+          setParseStatus("error");
+          // DO NOT FALLBACK TO SIMULATION if we know it failed
+          return;
         }
       } catch (err) {
         console.error("Proxy Error:", err);
+        setErrorDetails("Connection to Render Backend failed. Check if server is running.");
+        setParseStatus("error");
+        return;
       }
     }
 
-    // 2. Fallback to Simulation
+    // 2. Only use simulation if NO proxy URL is provided
     setTimeout(() => {
       let foundZoneKey = null;
       const matchedAddress = Object.keys(MOCK_ADDRESS_DB).find(addr => term.includes(addr));
@@ -988,9 +1029,25 @@ export default function App() {
                        disabled={parseStatus === 'processing' || !searchAddress}
                        className={`w-full py-4 text-white rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg transition-all ${parseStatus === 'processing' || !searchAddress ? 'bg-slate-400' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/30'}`}
                     >
-                       {parseStatus === 'processing' ? 'Searching GIS...' : parseStatus === 'success' ? 'Zoning Found!' : parseStatus === 'simulated' ? 'Zoning Simulated' : 'Find Zoning'} 
+                       {parseStatus === 'processing' ? 'Searching GIS...' : parseStatus === 'success' ? 'Zoning Found!' : parseStatus === 'simulated' ? 'Zoning Simulated' : parseStatus === 'error' ? 'Failed - Retry' : 'Find Zoning'} 
                        {parseStatus === 'idle' && <ArrowRight />}
                     </button>
+                    
+                    {parseStatus === 'error' && (
+                        <div className="mt-4 p-3 bg-red-50 text-red-700 text-xs rounded border border-red-200 flex gap-2">
+                            <XCircle size={16} />
+                            <div>
+                                <strong>Error:</strong> {errorDetails || "Could not fetch zoning data."}
+                            </div>
+                        </div>
+                    )}
+
+                    {parseStatus === 'simulated' && (
+                      <div className="mt-4 p-3 bg-amber-50 text-amber-700 text-xs rounded border border-amber-200 flex gap-2">
+                        <AlertTriangle size={16} />
+                        <span><strong>Simulation Mode:</strong> Backend connection failed, using dummy data.</span>
+                      </div>
+                    )}
                     
                     <div className="mt-auto pt-6 border-t border-slate-100">
                       <div className="flex items-center gap-2 text-emerald-600 text-xs font-bold mb-2">
